@@ -1,0 +1,24 @@
+{
+  "name": "nazarify",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,blue \"yarn workspace api dev\" \"yarn workspace web dev\"",
+    "dev:api": "yarn workspace api dev",
+    "dev:web": "yarn workspace web dev",
+    "build": "yarn workspaces run build",
+    "lint": "yarn workspaces run lint",
+    "typecheck": "yarn workspaces run typecheck",
+    "format": "prettier --write .",
+    "docker:dev:up": "docker compose -f docker-compose.dev.yml up --build -d",
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down -v",
+    "docker:logs:api": "docker compose -f docker-compose.dev.yml logs -f api",
+    "docker:logs:web": "docker compose -f docker-compose.dev.yml logs -f web"
+  },
+  "devDependencies": {
+    "concurrently": "^8"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

@@ -1,0 +1,35 @@
+# ---------- Base ----------
+FROM node:20-alpine AS base
+WORKDIR /app
+RUN corepack enable
+
+# ---------- Dev ----------
+FROM base AS dev
+WORKDIR /app
+# فقط فایل‌های قفل/پکیج برای کش بهتر
+COPY package.json yarn.lock ./
+COPY apps/api/package.json ./apps/api/
+# Yarn 1 "focus" ندارد → نصب کامل workspaces
+RUN yarn install
+# کد را در dev با Volume mount می‌کنیم؛ اما اگر لازم شد، حداقل ساختار را هم کپی می‌کنیم
+COPY apps/api ./apps/api
+WORKDIR /app/apps/api
+# در dev نیازی نیست اینجا prisma generate بزنیم؛ سرویس migrate این کار را می‌کند
+CMD ["yarn","dev"]
+
+# ---------- Prod build ----------
+FROM base AS build
+WORKDIR /app
+COPY . .
+RUN yarn install --frozen-lockfile
+WORKDIR /app/apps/api
+RUN yarn prisma generate && yarn build
+
+# ---------- Prod runtime ----------
+FROM node:20-alpine AS prod
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/apps/api/node_modules ./node_modules
+COPY --from=build /app/apps/api/dist ./dist
+COPY --from=build /app/apps/api/prisma ./prisma
+CMD ["node","dist/main.js"]

@@ -1,0 +1,48 @@
+// === Prisma Client (خروجی سفارشی نده) ===
+generator client {
+  provider = "prisma-client-js"
+}
+
+// === اتصال دیتابیس ===
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === مدل‌های مینیمم برای شروع ===
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  reviews      Review[]
+}
+
+model Entity {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  reviews   Review[]
+}
+
+model Review {
+  id          String   @id @default(cuid())
+  userId      String
+  entityId    String
+  rating      Int
+  pros        String[]
+  cons        String[]
+  body        String
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity      Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId]) // هر کاربر برای هر entity یک نظر
+  @@index([entityId, status, createdAt])
+}

@@ -1,0 +1,15 @@
+# node_modules در هاست
+node_modules/
+apps/*/node_modules/
+
+# خروجی‌های Next/Nest
+apps/web/.next/
+apps/api/dist/
+
+# محیط‌ها
+.env
+apps/*/.env
+**/.env.local
+
+# Docker junk
+**/.DS_Store
