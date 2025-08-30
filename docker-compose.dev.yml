@@ -53,7 +53,10 @@ services:
       - "5555:5555"
 
   migrate:
-    image: nazarify-api:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+      target: dev
     working_dir: /app/apps/api
     depends_on:
       postgres:
@@ -66,6 +69,8 @@ services:
         yarn prisma migrate deploy
       "
     restart: "no"
+    volumes:
+      - ./apps/api/prisma:/app/apps/api/prisma
 
   web:
     build:

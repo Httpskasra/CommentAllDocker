@@ -6,7 +6,7 @@ import React from "react";
 type ProductCardProps = {
   title: string;
   score?: number; // 0..100
-  images?: string[];
+  images?: string;
   pros?: string[];
   cons?: string[];
   description?: string;
@@ -16,7 +16,7 @@ type ProductCardProps = {
 export default function CommentCard({
   title,
   score = 80,
-  images = ["/product/Untitled.jpg", "/product/Untitled.jpg"],
+  images = "/product/Untitled.jpg",
   pros = ["بد", "بد", "بد", "بد"],
   cons = ["بد", "بد", "بد", "بد"],
   description = "لورم ایپسوم متن ساختگی ...",
@@ -70,17 +70,15 @@ export default function CommentCard({
       <div className="flex items-center justify-between gap-3">
         {/* تصاویر */}
         <div className="flex gap-2 shrink-0">
-          {images.slice(0, 2).map((src, i) => (
-            <div key={src + i} className="h-16 w-12 overflow-hidden rounded-md bg-gray-100">
-              <Image
-                src={src}
-                alt=""
-                width={90}
-                height={120}
-                className="h-full w-full object-cover"
-              />
-            </div>
-          ))}
+          <div className="h-16 w-12 overflow-hidden rounded-md bg-gray-100">
+            <Image
+              src={images}
+              alt=""
+              width={90}
+              height={120}
+              className="h-full w-full object-cover"
+            />
+          </div>
         </div>
 
         {/* عنوان */}

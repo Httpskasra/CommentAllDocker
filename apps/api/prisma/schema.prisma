@@ -1,48 +1,170 @@
-// === Prisma Client (خروجی سفارشی نده) ===
-generator client {
-  provider = "prisma-client-js"
-}
+// apps/api/prisma/schema.prisma
 
-// === اتصال دیتابیس ===
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// === مدل‌های مینیمم برای شروع ===
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
-
-  reviews      Review[]
+generator client {
+  provider = "prisma-client-js"
 }
 
-model Entity {
-  id        String   @id @default(cuid())
-  type      String
+enum UserRole {
+  USER
+  ADMIN
+}
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+enum ReviewVerified {
+  NONE
+  SELF
+  DOCUMENT
+}
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+enum ReportReason {
+  SPAM
+  ABUSE
+  AD
+  OFFTOPIC
+  FAKE
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique @db.Citext
+  username     String    @unique
+  passwordHash String
+  role         UserRole  @default(USER)
+  showProfile  Boolean   @default(false)
+  trustScore   Float     @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reviews      Review[]
+  votes        ReviewVote[]
+  bookmarks    ReviewBookmark[]
+  reports      ReviewReport[] @relation("UserReports")
+  comments     ReviewComment[]
+}
+
+model Product {
+  id        String   @id @default(uuid())
   name      String
   slug      String   @unique
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   reviews   Review[]
+
+  @@index([name])
 }
 
 model Review {
-  id          String   @id @default(cuid())
+  id          String         @id @default(uuid())
   userId      String
-  entityId    String
-  rating      Int
+  productId   String
+  title       String
+  body        String
   pros        String[]
   cons        String[]
-  body        String
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
+  rating      Int
+  verified    ReviewVerified @default(NONE)
+  status      ReviewStatus   @default(PENDING)
+  helpfulUp   Int            @default(0)
+  helpfulDown Int            @default(0)
+  usedAt      DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
 
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  entity      Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  images      ReviewImage[]
+  votes       ReviewVote[]
+  bookmarks   ReviewBookmark[]
+  comments    ReviewComment[]
+  reports     ReviewReport[]
 
-  @@unique([userId, entityId]) // هر کاربر برای هر entity یک نظر
-  @@index([entityId, status, createdAt])
+  @@index([productId, status, createdAt])
+  @@index([rating])
+}
+
+model ReviewImage {
+  id        String   @id @default(uuid())
+  reviewId  String
+  url       String
+  mime      String?
+  width     Int?
+  height    Int?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+}
+
+model ReviewVote {
+  id        String   @id @default(uuid())
+  userId    String
+  reviewId  String
+  vote      Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reviewId], name: "userId_reviewId")
+  @@index([reviewId, vote])
+}
+
+model ReviewBookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  reviewId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, reviewId], name: "userId_reviewId_bookmark")
+}
+
+model ReviewReport {
+  id         String       @id @default(uuid())
+  reporterId String
+  reviewId   String
+  reason     ReportReason
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  reporter   User   @relation("UserReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  review     Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@index([status])
+}
+
+model ReviewComment {
+  id        String          @id @default(uuid())
+  reviewId  String
+  userId    String
+  parentId  String?
+  body      String
+  createdAt DateTime        @default(now())
+
+  review    Review          @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    ReviewComment?  @relation("Thread", fields: [parentId], references: [id])
+  children  ReviewComment[] @relation("Thread")
+
+  @@index([reviewId])
 }
