@@ -54,26 +54,16 @@ model User {
   comments     ReviewComment[]
 }
 
-model Product {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  reviews   Review[]
-
-  @@index([name])
-}
 
 model Review {
   id          String         @id @default(uuid())
   userId      String
-  productId   String
   title       String
   body        String
   pros        String[]
   cons        String[]
+  productName String
   rating      Int
   verified    ReviewVerified @default(NONE)
   status      ReviewStatus   @default(PENDING)
@@ -85,14 +75,13 @@ model Review {
   deletedAt   DateTime?
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   images      ReviewImage[]
   votes       ReviewVote[]
   bookmarks   ReviewBookmark[]
   comments    ReviewComment[]
   reports     ReviewReport[]
 
-  @@index([productId, status, createdAt])
+  @@index([status, createdAt])
   @@index([rating])
 }
 

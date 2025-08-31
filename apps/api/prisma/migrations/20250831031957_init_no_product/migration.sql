@@ -1,4 +1,3 @@
--- Extensions (must run before using CITEXT)
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- CreateEnum
@@ -32,25 +31,14 @@ CREATE TABLE "public"."User" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Product" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Product_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "public"."Review" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "productId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "body" TEXT NOT NULL,
     "pros" TEXT[],
     "cons" TEXT[],
+    "productName" TEXT NOT NULL,
     "rating" INTEGER NOT NULL,
     "verified" "public"."ReviewVerified" NOT NULL DEFAULT 'NONE',
     "status" "public"."ReviewStatus" NOT NULL DEFAULT 'PENDING',
@@ -131,13 +119,7 @@ CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
 CREATE UNIQUE INDEX "User_username_key" ON "public"."User"("username");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Product_slug_key" ON "public"."Product"("slug");
-
--- CreateIndex
-CREATE INDEX "Product_name_idx" ON "public"."Product"("name");
-
--- CreateIndex
-CREATE INDEX "Review_productId_status_createdAt_idx" ON "public"."Review"("productId", "status", "createdAt");
+CREATE INDEX "Review_status_createdAt_idx" ON "public"."Review"("status", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "Review_rating_idx" ON "public"."Review"("rating");
@@ -165,9 +147,6 @@ CREATE INDEX "ReviewComment_reviewId_idx" ON "public"."ReviewComment"("reviewId"
 
 -- AddForeignKey
 ALTER TABLE "public"."Review" ADD CONSTRAINT "Review_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."Review" ADD CONSTRAINT "Review_productId_fkey" FOREIGN KEY ("productId") REFERENCES "public"."Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."ReviewImage" ADD CONSTRAINT "ReviewImage_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "public"."Review"("id") ON DELETE CASCADE ON UPDATE CASCADE;
