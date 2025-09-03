@@ -25,7 +25,7 @@ export default function Hero({
   plusIconSrc = "/images/plus.svg",
   className,
 }: HeroProps) {
-  const base = "w-full "; // پس‌زمینه روشن
+  const base = "w-full ";
   return (
     <section dir="rtl" className={className ? `${base} ${className}` : base}>
       <div className="mx-auto flex max-w-6xl items-center justify-between max-h-[500px] px-4 py-10 sm:px-6 md:py-16 lg:py-20 gap-6">
