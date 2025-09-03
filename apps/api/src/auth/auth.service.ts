@@ -2,7 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SmsService } from './sms/sms.service';
 import { OtpService } from './otp/otp.service';
-import { Prisma } from '@prisma/client';
+import { OtpPurpose } from '@prisma/client';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 import { addSeconds } from 'date-fns';
@@ -32,14 +32,14 @@ export class AuthService {
   }
 
   // ---------- OTP ----------
-  async requestOtp(phone: string, purpose: Prisma.OtpPurpose) {
+  async requestOtp(phone: string, purpose: OtpPurpose) {
     const { code, expiresAt } = await this.otp.issue(phone, purpose);
     await this.sms.sendOtp(phone, code);
     return { expiresAt };
   }
 
   // SIGNUP & LOGIN via phone (LINK_PHONE handled separately)
-  async verifyOtpAndHandle(phone: string, purpose: Prisma.OtpPurpose, code: string, name?: string) {
+  async verifyOtpAndHandle(phone: string, purpose: OtpPurpose, code: string, name?: string) {
     await this.otp.verify(phone, purpose, code);
 
     if (purpose === 'SIGNUP') {

@@ -4,7 +4,7 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './guards/jwt.guard';
 import type { Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { OtpPurpose } from '@prisma/client';
 import { AuthGuard } from '@nestjs/passport';
 
 function setAuthCookies(res: Response, access: string, refresh: string) {
@@ -19,14 +19,14 @@ export class AuthController {
   // ----- OTP -----
   @Post('request-otp')
   async requestOtp(@Body() dto: RequestOtpDto) {
-    const { expiresAt } = await this.auth.requestOtp(dto.phone, dto.purpose as Prisma.OtpPurpose);
+    const { expiresAt } = await this.auth.requestOtp(dto.phone, dto.purpose as OtpPurpose);
     return { ok: true, expiresAt };
   }
 
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto, @Res() res: Response) {
     const { user, access, refresh, accessExpiresAt } =
-    await this.auth.verifyOtpAndHandle(dto.phone, dto.purpose as Prisma.OtpPurpose, dto.code, dto.name);
+    await this.auth.verifyOtpAndHandle(dto.phone, dto.purpose as OtpPurpose, dto.code, dto.name);
     setAuthCookies(res, access, refresh);
     return res.json({ user, accessExpiresAt });
   }
