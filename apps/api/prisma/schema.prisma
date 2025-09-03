@@ -41,20 +41,6 @@ enum OtpPurpose {
   LOGIN
 }
 
-model OtpCode {
-  id         String     @id @default(uuid())
-  phone      String
-  codeHash   String
-  purpose    OtpPurpose
-  userId     String?
-  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  expiresAt  DateTime
-  consumedAt DateTime?
-  attempts   Int        @default(0)
-  createdAt  DateTime   @default(now())
-
-  @@index([phone, purpose, expiresAt])
-}
 
 model RefreshToken {
   id        String   @id @default(uuid())
@@ -82,8 +68,6 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-
-  otpCodes        OtpCode[]
   sessions        RefreshToken[]
   reviews      Review[]
   votes        ReviewVote[]
