@@ -1,31 +1,67 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
-import { AuthService } from "./auth.service";
-import { RegisterDto } from "./dto/register.dto";
-import { LoginDto } from "./dto/login.dto";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { AuthService } from './auth.service';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { JwtAuthGuard } from './guards/jwt.guard';
+import type { Response } from 'express';
+import { Prisma } from '@prisma/client';
+import { AuthGuard } from '@nestjs/passport';
 
-@Controller("auth")
+function setAuthCookies(res: Response, access: string, refresh: string) {
+  res.cookie('access_token', access, { httpOnly: true, sameSite: 'lax', secure: false, path: '/' });
+  res.cookie('refresh_token', refresh, { httpOnly: true, sameSite: 'lax', secure: false, path: '/' });
+}
+
+@Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(private readonly auth: AuthService) {}
 
-  @Post("register")
-  register(@Body() dto: RegisterDto) {
-    return this.auth.register(dto.email, dto.username, dto.password);
+  // ----- OTP -----
+  @Post('request-otp')
+  async requestOtp(@Body() dto: RequestOtpDto) {
+    const { expiresAt } = await this.auth.requestOtp(dto.phone, dto.purpose as Prisma.OtpPurpose);
+    return { ok: true, expiresAt };
   }
 
-  @Post("login")
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+  @Post('verify-otp')
+  async verifyOtp(@Body() dto: VerifyOtpDto, @Res() res: Response) {
+    const { user, access, refresh, accessExpiresAt } =
+    await this.auth.verifyOtpAndHandle(dto.phone, dto.purpose as Prisma.OtpPurpose, dto.code, dto.name);
+    setAuthCookies(res, access, refresh);
+    return res.json({ user, accessExpiresAt });
   }
 
-  @Post("refresh")
-  refresh(@Body("refreshToken") refreshToken: string) {
-    return this.auth.refresh(refreshToken);
+  // ----- Google OAuth (standard login) -----
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() {
+    // redirects to Google
+  }
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleCallback(@Req() req: any, @Res() res: Response) {
+    const { user, access, refresh, needsPhoneLink } = await this.auth.handleGoogleProfile(req.user);
+    setAuthCookies(res, access, refresh);
+
+    // Redirect your frontend to an appropriate page to link phone if needed
+    const url = new URL(process.env.APP_URL || 'http://localhost:3000');
+    url.pathname = needsPhoneLink ? '/link-phone' : '/';
+    res.redirect(url.toString());
+  }
+
+  // ----- Link phone for Google-first users -----
+  @UseGuards(JwtAuthGuard)
+  @Post('link-phone/start')
+  async linkPhoneStart(@Body('phone') phone: string, @Req() req: any) {
+    const { expiresAt } = await this.auth.linkPhoneStart(req.user.sub, phone);
+    return { ok: true, expiresAt };
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get("me")
-  me() {
+  @Post('link-phone/verify')
+  async linkPhoneVerify(@Body() body: { phone: string; code: string }, @Req() req: any) {
+    await this.auth.linkPhoneVerify(req.user.sub, body.phone, body.code);
     return { ok: true };
   }
 }

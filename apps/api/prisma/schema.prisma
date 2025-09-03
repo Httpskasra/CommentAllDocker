@@ -35,18 +35,56 @@ enum ReportReason {
   OFFTOPIC
   FAKE
 }
+enum OtpPurpose {
+  SIGNUP
+  LINK_PHONE
+  LOGIN
+}
+
+model OtpCode {
+  id         String     @id @default(uuid())
+  phone      String
+  codeHash   String
+  purpose    OtpPurpose
+  userId     String?
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
+
+  @@index([phone, purpose, expiresAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+}
+
+
 
 model User {
   id           String    @id @default(uuid())
-  email        String    @unique @db.Citext
-  username     String    @unique
-  passwordHash String
   role         UserRole  @default(USER)
   showProfile  Boolean   @default(false)
   trustScore   Float     @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  phone           String?   @unique
+  phoneVerifiedAt DateTime?
+  googleId        String?   @unique
+  name            String?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
+
+  otpCodes        OtpCode[]
+  sessions        RefreshToken[]
   reviews      Review[]
   votes        ReviewVote[]
   bookmarks    ReviewBookmark[]

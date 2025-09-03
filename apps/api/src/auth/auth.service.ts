@@ -1,85 +1,131 @@
-import {
-  BadRequestException,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
-import { UsersService } from "../users/users.service";
-import { JwtService } from "@nestjs/jwt";
-import * as argon2 from "argon2";
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { SmsService } from './sms/sms.service';
+import { OtpService } from './otp/otp.service';
+import { Prisma } from '@prisma/client';
+import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs';
+import { addSeconds } from 'date-fns';
+
+const ACCESS_TTL = parseInt(process.env.JWT_ACCESS_TTL || '900', 10);      // 15m
+const REFRESH_TTL = parseInt(process.env.JWT_REFRESH_TTL || '2592000', 10); // 30d
 
 @Injectable()
 export class AuthService {
   constructor(
-    private users: UsersService,
-    private jwt: JwtService,
+    private prisma: PrismaService,
+    private sms: SmsService,
+    private otp: OtpService,
   ) {}
 
-  private signTokens(user: { id: string; email: string; role?: string }) {
-    const payload = { sub: user.id, email: user.email, role: user.role };
-    const accessToken = this.jwt.sign(payload, {
-      secret: process.env.JWT_ACCESS_SECRET || "dev_access_secret_change_me",
-      expiresIn: "15m",
+  // ---------- Tokens ----------
+  private signAccess(userId: string) {
+    return jwt.sign({ sub: userId }, process.env.JWT_ACCESS_SECRET!, { expiresIn: ACCESS_TTL });
+  }
+  private async signRefresh(userId: string, ua?: string, ip?: string) {
+    const raw = jwt.sign({ sub: userId, typ: 'refresh' }, process.env.JWT_REFRESH_SECRET!, { expiresIn: REFRESH_TTL });
+    const hash = await bcrypt.hash(raw, 10);
+    await this.prisma.refreshToken.create({
+      data: { userId, tokenHash: hash, userAgent: ua, ip },
     });
-    const refreshToken = this.jwt.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || "dev_refresh_secret_change_me",
-      expiresIn: "7d",
-    });
-    return { accessToken, refreshToken };
+    return raw;
   }
 
-  private sanitize(user: any) {
-    if (!user) return user;
-    const { passwordHash, ...clean } = user;
-    return clean;
+  // ---------- OTP ----------
+  async requestOtp(phone: string, purpose: Prisma.OtpPurpose) {
+    const { code, expiresAt } = await this.otp.issue(phone, purpose);
+    await this.sms.sendOtp(phone, code);
+    return { expiresAt };
   }
 
-  async register(email: string, username: string, password: string) {
-    const byEmail = await this.users.findByEmail(email);
-    if (byEmail) throw new BadRequestException("Email already in use");
+  // SIGNUP & LOGIN via phone (LINK_PHONE handled separately)
+  async verifyOtpAndHandle(phone: string, purpose: Prisma.OtpPurpose, code: string, name?: string) {
+    await this.otp.verify(phone, purpose, code);
 
-    const byUsername = await this.users.findByUsername(username);
-    if (byUsername) throw new BadRequestException("Username already in use");
+    if (purpose === 'SIGNUP') {
+      let user = await this.prisma.user.findUnique({ where: { phone } });
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: { phone, phoneVerifiedAt: new Date(), name: name || 'User' },
+        });
+      } else if (!user.phoneVerifiedAt) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { phoneVerifiedAt: new Date() },
+        });
+      }
 
-    const passwordHash = await argon2.hash(password);
-    const user = await this.users.create({ email, username, passwordHash });
-    const tokens = this.signTokens({
-      id: user.id,
-      email: user.email,
-      role: user.role as any,
-    });
+      await this.otp.invalidateAll(phone, 'SIGNUP');
+      const access = this.signAccess(user.id);
+      const refresh = await this.signRefresh(user.id);
+      await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
-    return { user: this.sanitize(user), ...tokens };
-  }
-
-  async login(email: string, password: string) {
-    const user = await this.users.findByEmail(email);
-    if (!user) throw new UnauthorizedException("Invalid credentials");
-
-    const ok = await argon2.verify(user.passwordHash, password);
-    if (!ok) throw new UnauthorizedException("Invalid credentials");
-
-    const tokens = this.signTokens({
-      id: user.id,
-      email: user.email,
-      role: user.role as any,
-    });
-    return { user: this.sanitize(user), ...tokens };
-  }
-
-  async refresh(refreshToken: string) {
-    try {
-      const payload = this.jwt.verify(refreshToken, {
-        secret:
-          process.env.JWT_REFRESH_SECRET || "dev_refresh_secret_change_me",
-      });
-      const tokens = this.signTokens({
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-      });
-      return tokens;
-    } catch {
-      throw new UnauthorizedException("Invalid refresh token");
+      return {
+        user,
+        access,
+        refresh,
+        accessExpiresAt: addSeconds(new Date(), ACCESS_TTL),
+      };
     }
+
+    if (purpose === 'LOGIN') {
+      const user = await this.prisma.user.findUnique({ where: { phone } });
+      if (!user || !user.phoneVerifiedAt) {
+        throw new BadRequestException('Phone is not verified. Use SIGNUP first.');
+      }
+      await this.otp.invalidateAll(phone, 'LOGIN');
+      const access = this.signAccess(user.id);
+      const refresh = await this.signRefresh(user.id);
+      await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+      return {
+        user,
+        access,
+        refresh,
+        accessExpiresAt: addSeconds(new Date(), ACCESS_TTL),
+      };
+    }
+
+    throw new BadRequestException('Unsupported purpose.');
+  }
+
+  // ---------- Google OAuth ----------
+  // Called by /auth/google/callback (profile comes from GoogleStrategy)
+  async handleGoogleProfile(p: { googleId: string; name?: string | null; email?: string | null }) {
+    let user = await this.prisma.user.findUnique({ where: { googleId: p.googleId } });
+
+    if (!user) {
+      // Optionally: try to find by email if you ever store it (you removed email from schema)
+      user = await this.prisma.user.create({
+        data: { googleId: p.googleId, name: p.name || 'User' },
+      });
+    }
+
+    const needsPhoneLink = !user.phoneVerifiedAt || !user.phone;
+
+    const access = this.signAccess(user.id);
+    const refresh = await this.signRefresh(user.id);
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    return { user, access, refresh, needsPhoneLink };
+  }
+
+  // ---------- Link phone for Google-first users ----------
+  async linkPhoneStart(userId: string, phone: string) {
+    const exists = await this.prisma.user.findUnique({ where: { phone } });
+    if (exists) throw new BadRequestException('Phone already in use.');
+    const { code, expiresAt } = await this.otp.issue(phone, 'LINK_PHONE');
+    await this.sms.sendOtp(phone, code);
+    return { expiresAt };
+  }
+
+  async linkPhoneVerify(userId: string, phone: string, code: string) {
+    await this.otp.verify(phone, 'LINK_PHONE', code);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { phone, phoneVerifiedAt: new Date() },
+    });
+    await this.otp.invalidateAll(phone, 'LINK_PHONE');
+    return { ok: true };
   }
 }

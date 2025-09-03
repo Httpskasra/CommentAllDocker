@@ -1,21 +1,20 @@
-import { Injectable } from "@nestjs/common";
-import { PassportStrategy } from "@nestjs/passport";
-import { ExtractJwt, Strategy } from "passport-jwt";
-
-export type JwtPayload = { sub: string; role?: string; email?: string };
+import { Injectable } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey:
-        process.env.JWT_ACCESS_SECRET || "dev_access_secret_change_me",
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req) => req?.cookies?.access_token || null,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
+      ignoreExpiration: false,
+      secretOrKey: process.env.JWT_ACCESS_SECRET!,
     });
   }
-
-  async validate(payload: JwtPayload) {
-    // هر چیزی که اینجا return بشه توی req.user در دسترسه
-    return { userId: payload.sub, role: payload.role, email: payload.email };
+  async validate(payload: any) {
+    return payload; // { sub: userId }
   }
 }
